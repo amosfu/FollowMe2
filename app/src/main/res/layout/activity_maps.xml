@@ -18,7 +18,7 @@
 
     <EditText
         android:id="@+id/follow_pwd"
-        android:layout_width="wrap_content"
+        android:layout_width="100dp"
         android:layout_height="wrap_content"
         android:layout_alignStart="@+id/follow_id"
         android:layout_alignTop="@+id/follow_me"
@@ -37,7 +37,7 @@
 
     <EditText
         android:id="@+id/follow_id"
-        android:layout_width="wrap_content"
+        android:layout_width="100dp"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_toStartOf="@+id/follow"
@@ -47,7 +47,7 @@
 
     <EditText
         android:id="@+id/follow_secrect"
-        android:layout_width="wrap_content"
+        android:layout_width="100dp"
         android:layout_height="wrap_content"
         android:ems="10"
         android:gravity="right"
