@@ -11,6 +11,7 @@ import java.net.CookieManager;
 public class MyCustomApplication extends Application {
     private KeyObject keyObject;
     private CookieManager cookieManager;
+    private boolean isTorEnabled;
 
     public KeyObject getKeyObject() {
         return keyObject;
@@ -26,5 +27,13 @@ public class MyCustomApplication extends Application {
 
     public void setCookieManager(CookieManager cookieManager) {
         this.cookieManager = cookieManager;
+    }
+
+    public boolean isTorEnabled() {
+        return isTorEnabled;
+    }
+
+    public void setTorEnabled(boolean torEnabled) {
+        isTorEnabled = torEnabled;
     }
 }

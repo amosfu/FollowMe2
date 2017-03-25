@@ -18,10 +18,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.ContactsContract;
 import android.support.annotation.NonNull;
-import android.support.design.widget.Snackbar;
+import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.ArrayAdapter;
@@ -35,20 +36,13 @@ import com.shuai.followme2.bean.MyCustomApplication;
 import com.shuai.followme2.util.Utils;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
-import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.protocol.BasicHttpContext;
-import org.apache.http.protocol.HttpContext;
-import org.apache.http.util.EntityUtils;
 
 import java.net.CookieHandler;
 import java.net.CookieManager;
 import java.util.ArrayList;
 import java.util.List;
-
-import static android.Manifest.permission.READ_CONTACTS;
 
 /**
  * A login screen that offers login via email/password.
@@ -68,6 +62,7 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
      */
     private UserLoginTask mAuthTask = null;
 
+
     // UI references.
     private AutoCompleteTextView usernameView;
     private EditText mPasswordView;
@@ -76,6 +71,7 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
 
     //DH-EKE key object
     private KeyObject keyObject = null;
+
     public KeyObject getKeyObject() {
         return keyObject;
     }
@@ -89,8 +85,7 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Utils.startOrchid();
-        Utils.testOrchidUsingProxyObject();
+
         cookieManager = new CookieManager();
         CookieHandler.setDefault(cookieManager);
 
@@ -98,7 +93,9 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
         setContentView(R.layout.activity_login);
         // Set up the login form.
         usernameView = (AutoCompleteTextView) findViewById(R.id.email);
-        populateAutoComplete();
+        if (ActivityCompat.checkSelfPermission(loginActivity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(loginActivity, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_ACCESS_FINE_LOCATION);
+        }
 
         mPasswordView = (EditText) findViewById(R.id.password);
 
@@ -122,36 +119,6 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
         mProgressView = findViewById(R.id.login_progress);
     }
 
-    private void populateAutoComplete() {
-        if (!mayRequestContacts()) {
-            return;
-        }
-
-        getLoaderManager().initLoader(0, null, this);
-    }
-
-    private boolean mayRequestContacts() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            return true;
-        }
-        if (checkSelfPermission(READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
-            return true;
-        }
-        if (shouldShowRequestPermissionRationale(READ_CONTACTS)) {
-            Snackbar.make(usernameView, R.string.permission_rationale, Snackbar.LENGTH_INDEFINITE)
-                    .setAction(android.R.string.ok, new View.OnClickListener() {
-                        @Override
-                        @TargetApi(Build.VERSION_CODES.M)
-                        public void onClick(View v) {
-                            requestPermissions(new String[]{READ_CONTACTS}, REQUEST_READ_CONTACTS);
-                        }
-                    });
-        } else {
-            requestPermissions(new String[]{READ_CONTACTS}, REQUEST_READ_CONTACTS);
-        }
-        return false;
-    }
-
     /**
      * Callback received when a permissions request has been completed.
      */
@@ -159,18 +126,10 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
         switch (requestCode) {
-            case REQUEST_READ_CONTACTS:
-                if (grantResults.length == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    populateAutoComplete();
-                }
-                if (ActivityCompat.checkSelfPermission(loginActivity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                    ActivityCompat.requestPermissions(loginActivity, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_ACCESS_FINE_LOCATION);
-                }
-                return;
             case REQUEST_ACCESS_FINE_LOCATION:
                 if (grantResults.length == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // do nothing
-                    System.out.println("ACCESS_FINE_LOCATION granted!");
+                    Log.i(Utils.APP_LABEL, "ACCESS_FINE_LOCATION granted!");
                 }
         }
     }
@@ -320,10 +279,69 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
         int IS_PRIMARY = 1;
     }
 
+    private boolean isTorEnabled = false;
+    private InitializeTor mInitializeTorTask = null;
+
+    @Override
+    protected void onPostCreate(@Nullable Bundle savedInstanceState) {
+        super.onPostCreate(savedInstanceState);
+        if (Build.VERSION.SDK_INT <= 22) { // check SDK version if <= 22 , use Tor Network
+            mInitializeTorTask = new InitializeTor();
+            mInitializeTorTask.execute((Void) null);
+        }
+    }
+
     /**
      * Represents an asynchronous login/registration task used to authenticate
      * the user.
      */
+    public class InitializeTor extends AsyncTask<Void, Integer, Boolean> {
+        ProgressDialog mTorProgressDialog = new ProgressDialog(findViewById(R.id.usrnamepwd_login_form).getContext());
+
+        @Override
+        protected Boolean doInBackground(Void... params) {
+            try {
+                Utils.startOrchid(mTorProgressDialog, loginActivity);
+                Utils.torLock.await();
+                return true;
+            } catch (Exception e) {
+                Log.i(Utils.APP_LABEL, "exception", e);
+                e.printStackTrace();
+                return false;
+            }
+        }
+
+        protected void onPreExecute() {
+            super.onPreExecute();
+            mTorProgressDialog.setMessage("Initializing Tor Network, please wait...");
+            mTorProgressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+            mTorProgressDialog.setCancelable(false);
+            mTorProgressDialog.show();
+        }
+
+        protected void onProgressUpdate(Integer... progress) {
+            mTorProgressDialog.setProgress(progress[0]);
+        }
+
+        @Override
+        protected void onPostExecute(final Boolean success) {
+            mInitializeTorTask = null;
+            showProgress(false);
+            if (success) {
+                Utils.setIsTorEnabled(true);
+            }
+            if (mTorProgressDialog.isShowing()) {
+                mTorProgressDialog.dismiss();
+            }
+        }
+
+        @Override
+        protected void onCancelled() {
+            mAuthTask = null;
+            showProgress(false);
+        }
+    }
+
     public class UserLoginTask extends AsyncTask<Void, Integer, Boolean> {
 
         private final String username;
@@ -381,25 +399,6 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
             mProgressDialog.setProgress(progress[0]);
         }
 
-//        private void createAndShowAlertDialog() {
-//            AlertDialog.Builder builder = new AlertDialog.Builder(findViewById(R.id.usrnamepwd_login_form).getContext());
-//            builder.setMessage(R.string.msg_register);
-//            builder.setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
-//                public void onClick(DialogInterface dialog, int id) {
-//                    //TODO
-//                    dialog.dismiss();
-//                }
-//            });
-//            builder.setNegativeButton(android.R.string.cancel, new DialogInterface.OnClickListener() {
-//                public void onClick(DialogInterface dialog, int id) {
-//                    //TODO
-//                    dialog.dismiss();
-//                }
-//            });
-//            AlertDialog dialog = builder.create();
-//            dialog.show();
-//        }
-
         @Override
         protected void onPostExecute(final Boolean success) {
             mAuthTask = null;
@@ -409,6 +408,7 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
                 MyCustomApplication appObject = (MyCustomApplication) getApplication();
                 appObject.setKeyObject(keyObject);
                 appObject.setCookieManager(cookieManager);
+                appObject.setTorEnabled(isTorEnabled);
                 loginActivity.startActivity(intent);
             } else {
                 usernameView.setError((isLogin ? getString(R.string.error_incorrect_password) : getString(R.string.error_registration_failed)));

@@ -1,5 +1,7 @@
 package com.shuai.followme2.util;
 
+import android.app.Activity;
+import android.app.ProgressDialog;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -30,16 +32,15 @@ import java.net.URLEncoder;
 import java.security.KeyFactory;
 import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
-import java.security.Provider;
-import java.security.Security;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.DHParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLSocketFactory;
 
 /**
  * Created by Amos on 2017-03-09.
@@ -54,7 +55,16 @@ public class Utils {
     public static KeyFactory KEY_FACTORY;
 
     private static final TorClient TOR_CLIENT = new TorClient();
-    private static boolean isTorReady = false;
+    private static boolean isTorEnabled = false;
+    public static CountDownLatch torLock = new CountDownLatch(1);
+
+    public static boolean isTorEnabled() {
+        return isTorEnabled;
+    }
+
+    public static void setIsTorEnabled(boolean isTorEnabled) {
+        Utils.isTorEnabled = isTorEnabled;
+    }
 
     static {
         try {
@@ -62,14 +72,10 @@ public class Utils {
             BigInteger p = new BigInteger("f460d489678f7ec903293517e9193fd156c821b3e2b027c644eb96aedc85a54c971468cea07df15e9ecda0e2ca062161add38b9aa8aefcbd7ac18cd05a6bfb1147aaa516a6df694ee2cb5164607c618df7c65e75e274ff49632c34ce18da534ee32cfc42279e0f4c29101e89033130058d7f77744dddaca541094f19c394d485", 16);
             BigInteger g = new BigInteger("9ce2e29b2be0ebfd7b3c58cfb0ee4e9004e65367c069f358effaf2a8e334891d20ff158111f54b50244d682b720f964c4d6234079d480fcc2ce66e0fa3edeb642b0700cd62c4c02a483c92d2361e41a23706332bd3a8aaed07fe53bba376cefbce12fa46265ad5ea5210a3d96f5260f7b6f29588f61a4798e40bdc75bbb2b457", 16);
             int l = 512;
+
             DHParameterSpec dhSpec = new DHParameterSpec(p, g, l);
             KEY_PAIR_GENERATOR.initialize(dhSpec);
             KEY_FACTORY = KeyFactory.getInstance("DH");
-
-//            Security.addProvider(new Provider() {
-//            })
-            Provider[] providers = Security.getProviders();
-            startOrchid();
 
         } catch (Exception e) {
             Log.e(APP_LABEL, "exception", e);
@@ -77,60 +83,41 @@ public class Utils {
         }
     }
 
-    public static void startOrchid() {
-        TOR_CLIENT.addInitializationListener(createInitalizationListner());
-        TOR_CLIENT.enableSocksListener();//or client.enableSocksListener(yourPortNum);
+    public static void startOrchid(ProgressDialog progressDialog, Activity loginActivity) {
+        TOR_CLIENT.addInitializationListener(createInitalizationListner(progressDialog,loginActivity));
         TOR_CLIENT.start();
+        TOR_CLIENT.enableSocksListener();//or client.enableSocksListener(yourPortNum);
     }
 
-    public static TorInitializationListener createInitalizationListner() {
+    public static TorInitializationListener createInitalizationListner(final ProgressDialog progressDialog, final Activity loginActivity) {
         return new TorInitializationListener() {
             @Override
-            public void initializationProgress(String message, int percent) {
-                Log.i(APP_LABEL, ">>> [ " + percent + "% ]: " + message);
+            public void initializationProgress(String message, final int percent) {
+                final String msg = ">>> [ " + percent + "% ]: " + message;
+                Log.i(APP_LABEL, msg);
+                loginActivity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        progressDialog.setProgress(percent);
+                        progressDialog.setMessage(msg);
+                    }
+                });
             }
 
             @Override
             public void initializationCompleted() {
                 Log.i(APP_LABEL, "Tor is ready to go!");
-                isTorReady = true;
+                torLock.countDown();
             }
         };
-    }
-
-    public static void testOrchidUsingProxyObject() {
-        Thread thread = new Thread() {
-            @Override
-            public void run() {
-                try {
-                    //Caution: Native Java DNS lookup will occur outside of the tor network.
-                    //Monitor traffic on port 53 using tcpdump or equivalent.
-                    URL url = new URL("https://whiteboard-afu.rhcloud.com/");
-                    Proxy proxy = new Proxy(Proxy.Type.SOCKS, new InetSocketAddress("localhost", 9150));
-                    HttpsURLConnection uc = (HttpsURLConnection) url.openConnection(proxy);
-                    uc.setConnectTimeout(10000);
-                    SSLSocketFactory sf = uc.getSSLSocketFactory();
-
-                    byte[] byteArr = IOUtils.toByteArray(uc.getInputStream());
-                    Log.i(APP_LABEL,new String(byteArr));
-
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    Log.i(APP_LABEL,"exception",e);
-                }
-            }
-        };
-        thread.start();
     }
 
     private synchronized static HttpsURLConnection getHttpsURLConnection(URL url) throws Exception {
-        while (!isTorReady) {
-            TimeUnit.SECONDS.sleep(1);
+        if (isTorEnabled) {
+            Proxy proxy = new Proxy(Proxy.Type.SOCKS, new InetSocketAddress("localhost", 9150));
+            return (HttpsURLConnection) url.openConnection(proxy);
         }
-
-        Proxy proxy = new Proxy(Proxy.Type.SOCKS, new InetSocketAddress("localhost", 9150));
-        return (HttpsURLConnection) url.openConnection(proxy);
-        //return (HttpsURLConnection) url.openConnection();
+        return (HttpsURLConnection) url.openConnection();
     }
 
 

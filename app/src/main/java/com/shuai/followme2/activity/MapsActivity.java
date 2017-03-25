@@ -16,7 +16,6 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.util.Log;
 import android.view.View;
-import android.webkit.CookieManager;
 import android.widget.CheckBox;
 import android.widget.EditText;
 
@@ -41,13 +40,9 @@ import com.shuai.followme2.bean.MyCustomApplication;
 import com.shuai.followme2.util.Utils;
 
 import org.apache.commons.lang3.ArrayUtils;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
 import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.protocol.HttpContext;
 
-import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -201,6 +196,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             MyCustomApplication appObject = (MyCustomApplication) getApplication();
             this.keyObject = appObject.getKeyObject();
             this.cookieManager = appObject.getCookieManager();
+            this.
             mGoogleApiClient = new GoogleApiClient.Builder(this)
                     .addApi(LocationServices.API)
                     .addConnectionCallbacks(this)
