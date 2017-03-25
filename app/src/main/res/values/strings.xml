@@ -1,0 +1,24 @@
+<resources>
+    <string name="app_name">FollowMe2</string>
+
+    <!-- Strings related to login -->
+    <string name="prompt_username">UserName</string>
+    <string name="prompt_password">Password</string>
+    <string name="action_sign_in">Sign in</string>
+    <string name="action_sign_in_short">Sign in</string>
+    <string name="error_invalid_username">This username is invalid</string>
+    <string name="error_invalid_password">This password is too short</string>
+    <string name="error_incorrect_password">Username or password is incorrect</string>
+    <string name="error_registration_failed">Username is unavailable</string>
+    <string name="error_field_required">This field is required</string>
+    <string name="msg_success">Succeeded</string>
+    <string name="msg_pullFailed">Requested user is offline/password is incorrect!</string>
+    <string name="msg_pullSucceeded">Requested user is back online!</string>
+    <string name="msg_noPermission">Don\'t have proper location permission</string>
+    <string name="permission_rationale">"Contacts permissions are needed for providing email
+        completions."
+    </string>
+    <string name="action_register">Register</string>
+    <string name="title_activity_maps">Map</string>
+    <string name="follow">Follow</string>
+</resources>
