@@ -253,7 +253,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                     // encrypt GPS again with session key between clients and web server
                                     encryptedGps = Utils.encryptJsonObject(encryptedGps, keyObject.getSecretKey());
 
-                                    byte[] rsp = Utils.sendByteArrAsFileViaHTTP(encryptedGps,cookieManager , Utils.SERVER_DOMAIN + "/push", false);
+                                    byte[] rsp = Utils.sendByteArrAsFileViaHTTP(encryptedGps,cookieManager , Utils.SERVER_DOMAIN + "/push", false, mapsActivity);
                                 } catch (Exception e) {
                                     Log.e(APP_LABEL, "exception", e);
                                     e.printStackTrace();
@@ -301,7 +301,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 //                                    entity.writeTo(baos);
 //                                    byte[] GPSCipher = baos.toByteArray();
 
-                                    byte[] GPSCipher = Utils.sendHTTPSWithNameValuePair(Utils.SERVER_DOMAIN + "/pull", nameValuePair, cookieManager);
+                                    byte[] GPSCipher = Utils.sendHTTPSWithNameValuePair(Utils.SERVER_DOMAIN + "/pull", nameValuePair, cookieManager, mapsActivity);
 
                                     // decrypt using session key between client and web server
                                     GPSCipher = ArrayUtils.toPrimitive(Utils.decryptJsonObject(GPSCipher, keyObject.getSecretKey(), Byte[].class));

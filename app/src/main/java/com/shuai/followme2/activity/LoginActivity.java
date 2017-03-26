@@ -5,9 +5,11 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.LoaderManager.LoaderCallbacks;
 import android.app.ProgressDialog;
 import android.content.CursorLoader;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.Loader;
 import android.content.pm.PackageManager;
@@ -16,6 +18,7 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.provider.ContactsContract;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -43,6 +46,8 @@ import java.net.CookieHandler;
 import java.net.CookieManager;
 import java.util.ArrayList;
 import java.util.List;
+
+import info.guardianproject.netcipher.proxy.OrbotHelper;
 
 /**
  * A login screen that offers login via email/password.
@@ -117,6 +122,49 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
 
         mLoginFormView = findViewById(R.id.login_form);
         mProgressView = findViewById(R.id.login_progress);
+    }
+
+    @Override
+    protected void onPostCreate(@Nullable Bundle savedInstanceState) {
+        super.onPostCreate(savedInstanceState);
+        final OrbotHelper orbotHelper = ((MyCustomApplication) getApplication()).getOrbotHelper();
+        if(!orbotHelper.isInstalled()){
+            Log.i(Utils.APP_LABEL,"Tor is not installed!");
+            this.loginActivity.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    AlertDialog.Builder builder = new AlertDialog.Builder(findViewById(R.id.usrnamepwd_login_form).getContext());
+                    builder.setMessage(R.string.msg_installOrbot);
+                    builder.setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface dialog, int id) {
+                            Intent intent = new Intent(Intent.ACTION_VIEW);
+                            intent.setData(Uri.parse("https://guardianproject.info/apps/orbot/"));
+                            startActivity(intent);
+                            dialog.dismiss();
+                        }
+                    });
+                    builder.setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface dialog, int id) {
+                            dialog.dismiss();
+                        }
+                    });
+                    final AlertDialog dialog = builder.create();
+                    dialog.show();
+                }
+            });
+        }
+
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        OrbotHelper orbotHelper = ((MyCustomApplication) getApplication()).getOrbotHelper();
+        orbotHelper.init();
+        if (orbotHelper.isInstalled()) {
+            Log.i(Utils.APP_LABEL, "Orbot is installed!");
+            Utils.isTorEnabled = true;
+        }
     }
 
     /**
@@ -279,69 +327,10 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
         int IS_PRIMARY = 1;
     }
 
-    private boolean isTorEnabled = false;
-    private InitializeTor mInitializeTorTask = null;
-
-    @Override
-    protected void onPostCreate(@Nullable Bundle savedInstanceState) {
-        super.onPostCreate(savedInstanceState);
-        if (Build.VERSION.SDK_INT <= 22) { // check SDK version if <= 22 , use Tor Network
-            mInitializeTorTask = new InitializeTor();
-            mInitializeTorTask.execute((Void) null);
-        }
-    }
-
     /**
      * Represents an asynchronous login/registration task used to authenticate
      * the user.
      */
-    public class InitializeTor extends AsyncTask<Void, Integer, Boolean> {
-        ProgressDialog mTorProgressDialog = new ProgressDialog(findViewById(R.id.usrnamepwd_login_form).getContext());
-
-        @Override
-        protected Boolean doInBackground(Void... params) {
-            try {
-                Utils.startOrchid(mTorProgressDialog, loginActivity);
-                Utils.torLock.await();
-                return true;
-            } catch (Exception e) {
-                Log.i(Utils.APP_LABEL, "exception", e);
-                e.printStackTrace();
-                return false;
-            }
-        }
-
-        protected void onPreExecute() {
-            super.onPreExecute();
-            mTorProgressDialog.setMessage("Initializing Tor Network, please wait...");
-            mTorProgressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-            mTorProgressDialog.setCancelable(false);
-            mTorProgressDialog.show();
-        }
-
-        protected void onProgressUpdate(Integer... progress) {
-            mTorProgressDialog.setProgress(progress[0]);
-        }
-
-        @Override
-        protected void onPostExecute(final Boolean success) {
-            mInitializeTorTask = null;
-            showProgress(false);
-            if (success) {
-                Utils.setIsTorEnabled(true);
-            }
-            if (mTorProgressDialog.isShowing()) {
-                mTorProgressDialog.dismiss();
-            }
-        }
-
-        @Override
-        protected void onCancelled() {
-            mAuthTask = null;
-            showProgress(false);
-        }
-    }
-
     public class UserLoginTask extends AsyncTask<Void, Integer, Boolean> {
 
         private final String username;
@@ -363,7 +352,7 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
             nameValuePair.add(new BasicNameValuePair("username", username));
             nameValuePair.add(new BasicNameValuePair("userpass", mPassword));
 
-            byte[] responseByteArray = Utils.sendHTTPSWithNameValuePair(Utils.SERVER_DOMAIN + (isLogin ? "/login" : "/register"), nameValuePair, cookieManager);
+            byte[] responseByteArray = Utils.sendHTTPSWithNameValuePair(Utils.SERVER_DOMAIN + (isLogin ? "/login" : "/register"), nameValuePair, cookieManager, loginActivity);
 
             String responseStr = new String(responseByteArray);
 
@@ -373,7 +362,7 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
                 // Creating HTTP client
                 try {
                     keyObject = new KeyObject(mPassword);
-                    byte[] httpResponseByteArr = Utils.sendByteArrAsFileViaHTTP(keyObject.generateKeyExchangeMsg(), cookieManager, Utils.SERVER_DOMAIN + "/key", true);
+                    byte[] httpResponseByteArr = Utils.sendByteArrAsFileViaHTTP(keyObject.generateKeyExchangeMsg(), cookieManager, Utils.SERVER_DOMAIN + "/key", true, loginActivity);
                     keyObject.parseKeyExchangeMsg(httpResponseByteArr);
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -408,7 +397,6 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
                 MyCustomApplication appObject = (MyCustomApplication) getApplication();
                 appObject.setKeyObject(keyObject);
                 appObject.setCookieManager(cookieManager);
-                appObject.setTorEnabled(isTorEnabled);
                 loginActivity.startActivity(intent);
             } else {
                 usernameView.setError((isLogin ? getString(R.string.error_incorrect_password) : getString(R.string.error_registration_failed)));

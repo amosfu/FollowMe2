@@ -14,6 +14,7 @@
     <string name="msg_success">Succeeded</string>
     <string name="msg_pullFailed">Requested user is offline/password is incorrect!</string>
     <string name="msg_pullSucceeded">Requested user is back online!</string>
+    <string name="msg_installOrbot">Do you want to install Orbot to enable Tor Network?</string>
     <string name="msg_noPermission">Don\'t have proper location permission</string>
     <string name="permission_rationale">"Contacts permissions are needed for providing email
         completions."

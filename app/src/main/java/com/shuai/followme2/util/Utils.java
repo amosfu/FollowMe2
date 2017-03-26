@@ -25,8 +25,7 @@ import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.net.CookieManager;
-import java.net.InetSocketAddress;
-import java.net.Proxy;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.security.KeyFactory;
@@ -34,13 +33,15 @@ import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.SynchronousQueue;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.DHParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import javax.net.ssl.HttpsURLConnection;
+
+import info.guardianproject.netcipher.client.StrongBuilder;
+import info.guardianproject.netcipher.client.StrongConnectionBuilder;
 
 /**
  * Created by Amos on 2017-03-09.
@@ -54,17 +55,8 @@ public class Utils {
     public static KeyPairGenerator KEY_PAIR_GENERATOR;
     public static KeyFactory KEY_FACTORY;
 
-    private static final TorClient TOR_CLIENT = new TorClient();
-    private static boolean isTorEnabled = false;
+    public static boolean isTorEnabled = false;
     public static CountDownLatch torLock = new CountDownLatch(1);
-
-    public static boolean isTorEnabled() {
-        return isTorEnabled;
-    }
-
-    public static void setIsTorEnabled(boolean isTorEnabled) {
-        Utils.isTorEnabled = isTorEnabled;
-    }
 
     static {
         try {
@@ -83,41 +75,61 @@ public class Utils {
         }
     }
 
-    public static void startOrchid(ProgressDialog progressDialog, Activity loginActivity) {
-        TOR_CLIENT.addInitializationListener(createInitalizationListner(progressDialog,loginActivity));
-        TOR_CLIENT.start();
-        TOR_CLIENT.enableSocksListener();//or client.enableSocksListener(yourPortNum);
-    }
-
-    public static TorInitializationListener createInitalizationListner(final ProgressDialog progressDialog, final Activity loginActivity) {
-        return new TorInitializationListener() {
-            @Override
-            public void initializationProgress(String message, final int percent) {
-                final String msg = ">>> [ " + percent + "% ]: " + message;
-                Log.i(APP_LABEL, msg);
-                loginActivity.runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        progressDialog.setProgress(percent);
-                        progressDialog.setMessage(msg);
-                    }
-                });
-            }
-
-            @Override
-            public void initializationCompleted() {
-                Log.i(APP_LABEL, "Tor is ready to go!");
-                torLock.countDown();
-            }
-        };
-    }
-
-    private synchronized static HttpsURLConnection getHttpsURLConnection(URL url) throws Exception {
+    private synchronized static HttpsURLConnection getHttpsURLConnection(final URL url, Activity activity) throws Exception {
         if (isTorEnabled) {
-            Proxy proxy = new Proxy(Proxy.Type.SOCKS, new InetSocketAddress("localhost", 9150));
-            return (HttpsURLConnection) url.openConnection(proxy);
+            final SynchronousQueue<Object> connectionQueue = new SynchronousQueue<>();
+            final StrongConnectionBuilder builder = StrongConnectionBuilder.forMaxSecurity(activity).connectTo(url);
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    builder.build(new StrongBuilder.Callback<HttpURLConnection>() {
+                        @Override
+                        public void onConnected(HttpURLConnection httpURLConnection) {
+                            try {
+                                connectionQueue.put(httpURLConnection);
+                                Log.i(APP_LABEL, "Created HttpsUrlConnection through Tor network");
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }
+                        }
+
+                        @Override
+                        public void onConnectionException(Exception e) {
+                            Log.i(APP_LABEL, "exception", e);
+                            try {
+                                connectionQueue.put(new Object());
+                            } catch (Exception ex) {
+                                Log.i(APP_LABEL, "exception", ex);
+                            }
+                        }
+
+                        @Override
+                        public void onTimeout() {
+                            Log.i(APP_LABEL, "Establishing HttpsUrlConnection timed-out!");
+                            try {
+                                connectionQueue.put(new Object());
+                            } catch (Exception e) {
+                                Log.i(APP_LABEL, "exception", e);
+                            }
+                        }
+
+                        @Override
+                        public void onInvalid() {
+                            Log.i(APP_LABEL, "StrongBuilder.Callback<HttpURLConnection>.onInvalid() called!");
+                            try {
+                                connectionQueue.put(new Object());
+                            } catch (Exception e) {
+                                Log.i(APP_LABEL, "exception", e);
+                            }
+                        }
+                    });
+                }
+            }).start();
+
+            return (HttpsURLConnection) connectionQueue.take();
+        } else {
+            return (HttpsURLConnection) url.openConnection();
         }
-        return (HttpsURLConnection) url.openConnection();
     }
 
 
@@ -158,18 +170,17 @@ public class Utils {
         return decryptedObject;
     }
 
-    public static byte[] sendByteArrAsFileViaHTTP(byte[] payload, CookieManager cookieManager, String url, Boolean isKey) {
+    public static byte[] sendByteArrAsFileViaHTTP(byte[] payload, CookieManager cookieManager, String url, Boolean isKey, Activity activity) {
         byte[] response = null;
         try {
             String attachmentName = isKey ? "keyUpload" : "dataUpload";
-            String attachmentFileName = attachmentName + ".bmp";
 
             ContentBody contentPart = new ByteArrayBody(payload, attachmentName);
             MultipartEntity reqEntity = new MultipartEntity(HttpMultipartMode.BROWSER_COMPATIBLE);
             reqEntity.addPart(attachmentName, contentPart);
 
             URL httpsUrl = new URL(url);
-            HttpsURLConnection conn = getHttpsURLConnection(httpsUrl);
+            HttpsURLConnection conn = getHttpsURLConnection(httpsUrl, activity);
 //            conn.setReadTimeout(10000);
 //            conn.setConnectTimeout(15000);
             conn.setRequestMethod("POST");
@@ -251,12 +262,12 @@ public class Utils {
         return null;
     }
 
-    public static byte[] sendHTTPSWithNameValuePair(String url, List<NameValuePair> nameValuePair, CookieManager cookieManager) {
+    public static byte[] sendHTTPSWithNameValuePair(String url, List<NameValuePair> nameValuePair, CookieManager cookieManager, Activity activity) {
         byte[] response = null;
         // Url Encoding the POST parameters
         try {
             URL httpsUrl = new URL(url);
-            HttpsURLConnection conn = getHttpsURLConnection(httpsUrl);
+            HttpsURLConnection conn = getHttpsURLConnection(httpsUrl, activity);
 //            conn.setReadTimeout(10000);
 //            conn.setConnectTimeout(15000);
             conn.setRequestMethod("POST");
