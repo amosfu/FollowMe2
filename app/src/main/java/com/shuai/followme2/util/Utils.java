@@ -1,15 +1,12 @@
 package com.shuai.followme2.util;
 
 import android.app.Activity;
-import android.app.ProgressDialog;
 import android.text.TextUtils;
 import android.util.Log;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
-import com.subgraph.orchid.TorClient;
-import com.subgraph.orchid.TorInitializationListener;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.http.NameValuePair;
