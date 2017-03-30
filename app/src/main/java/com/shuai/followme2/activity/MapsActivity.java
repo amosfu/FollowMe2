@@ -438,7 +438,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                     e.printStackTrace();
                                 }
                             }
-                        }, 0, 5, TimeUnit.SECONDS);
+                        }, 5, 5, TimeUnit.SECONDS); //delay 5s , interval 5s
                     } else {
                         isTargetOnline.set(true);
                         targetLocationMarker = null;

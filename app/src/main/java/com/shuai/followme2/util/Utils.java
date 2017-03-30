@@ -136,7 +136,6 @@ public class Utils {
     public static byte[] encryptJsonObject(Object input, byte[] key) {
         byte[] encrypted = null;
         byte[] json = encodeObjectToJson(input);
-        Log.e(APP_LABEL, "Encrypting Json : " + json);
         try {
             MessageDigest sha3 = MessageDigest.getInstance("SHA-256");
             // generate 256bit AES key
