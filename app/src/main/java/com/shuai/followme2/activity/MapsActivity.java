@@ -53,6 +53,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.shuai.followme2.util.Utils.APP_LABEL;
 
@@ -67,6 +68,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private EditText followSecrect;
     private ScheduledFuture<?> followTask;
     private final AtomicBoolean isTargetOnline = new AtomicBoolean(true);
+    private final AtomicInteger errorCounter = new AtomicInteger(0);
 
     private CheckBox followMe;
     private EditText followPwd;
@@ -325,7 +327,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                     byte[] GPSObjectMap = Utils.sendHTTPSWithNameValuePair(Utils.SERVER_DOMAIN + "/pull", new ArrayList<NameValuePair>(), cookieManager, mapsActivity);
                                     Map<String, String> jsonGPSObjectMap = (Map<String, String>) Utils.decodeJsonToObject(GPSObjectMap, Map.class);
                                     GpsTransfer gpsTransfer = null;
-                                    if(jsonGPSObjectMap != null && !jsonGPSObjectMap.isEmpty()) {
+                                    if (jsonGPSObjectMap != null && !jsonGPSObjectMap.isEmpty()) {
                                         // using existing DH-EKE key to decrypt GPS objects (can be extended to follow multiple targets)
                                         Map<String, GpsTransfer> gpsTransferMap = new LinkedHashMap<>();
                                         for (String followId : followKeyObject.getSecretKeyMap().keySet()) {
@@ -335,6 +337,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                         gpsTransfer = gpsTransferMap.get(followIdStr);
                                     }
                                     if (gpsTransfer != null) {
+                                        // refresh counter
+                                        errorCounter.set(0);
                                         if (!isTargetOnline.get()) {
                                             mapsActivity.runOnUiThread(new Runnable() {
                                                 @Override
@@ -396,41 +400,44 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                             }
                                         });
                                     } else {
-                                        if (isTargetOnline.get()) {
-                                            isTargetOnline.set(false); // mark target offline
-                                            mapsActivity.runOnUiThread(new Runnable() {
-                                                @Override
-                                                public void run() {
-                                                    AlertDialog.Builder builder = new AlertDialog.Builder(findViewById(R.id.map).getContext());
-                                                    builder.setMessage(R.string.msg_pullFailed);
-                                                    builder.setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
-                                                        public void onClick(DialogInterface dialog, int id) {
-                                                            // if user is offline, do nothing and clean edittext
-                                                            dialog.dismiss();
-                                                        }
-                                                    });
-                                                    final AlertDialog dialog = builder.create();
-                                                    dialog.show();
-                                                    // Hide after 10 seconds
-                                                    final Handler handler = new Handler();
-                                                    final Runnable runnable = new Runnable() {
-                                                        @Override
-                                                        public void run() {
-                                                            if (dialog.isShowing()) {
+                                        //check counter
+                                        if (errorCounter.incrementAndGet() > 5) {
+                                            if (isTargetOnline.get()) {
+                                                isTargetOnline.set(false); // mark target offline
+                                                mapsActivity.runOnUiThread(new Runnable() {
+                                                    @Override
+                                                    public void run() {
+                                                        AlertDialog.Builder builder = new AlertDialog.Builder(findViewById(R.id.map).getContext());
+                                                        builder.setMessage(R.string.msg_pullFailed);
+                                                        builder.setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+                                                            public void onClick(DialogInterface dialog, int id) {
+                                                                // if user is offline, do nothing and clean edittext
                                                                 dialog.dismiss();
                                                             }
-                                                        }
-                                                    };
+                                                        });
+                                                        final AlertDialog dialog = builder.create();
+                                                        dialog.show();
+                                                        // Hide after 10 seconds
+                                                        final Handler handler = new Handler();
+                                                        final Runnable runnable = new Runnable() {
+                                                            @Override
+                                                            public void run() {
+                                                                if (dialog.isShowing()) {
+                                                                    dialog.dismiss();
+                                                                }
+                                                            }
+                                                        };
 
-                                                    dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
-                                                        @Override
-                                                        public void onDismiss(DialogInterface dialog) {
-                                                            handler.removeCallbacks(runnable);
-                                                        }
-                                                    });
-                                                    handler.postDelayed(runnable, 10000); // auto-close alert dialog after 10 seconds
-                                                }
-                                            });
+                                                        dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+                                                            @Override
+                                                            public void onDismiss(DialogInterface dialog) {
+                                                                handler.removeCallbacks(runnable);
+                                                            }
+                                                        });
+                                                        handler.postDelayed(runnable, 10000); // auto-close alert dialog after 10 seconds
+                                                    }
+                                                });
+                                            }
                                         }
                                     }
                                 } catch (Exception e) {
@@ -440,6 +447,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                             }
                         }, 5, 5, TimeUnit.SECONDS); //delay 5s , interval 5s
                     } else {
+                        //reset counter
+                        errorCounter.set(0);
                         isTargetOnline.set(true);
                         targetLocationMarker = null;
                         // stop scheduled pull task
