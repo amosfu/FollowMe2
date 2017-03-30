@@ -14,6 +14,7 @@ import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
+import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.widget.CheckBox;
@@ -39,12 +40,14 @@ import com.shuai.followme2.bean.KeyObject;
 import com.shuai.followme2.bean.MyCustomApplication;
 import com.shuai.followme2.util.Utils;
 
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.http.NameValuePair;
-import org.apache.http.message.BasicNameValuePair;
 
+import java.net.CookieManager;
+import java.nio.charset.StandardCharsets;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -62,12 +65,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private CheckBox follow;
     private EditText followID;
     private EditText followSecrect;
-    private ScheduledFuture<?> fetchGPSwithID;
+    private ScheduledFuture<?> followTask;
     private final AtomicBoolean isTargetOnline = new AtomicBoolean(true);
 
     private CheckBox followMe;
     private EditText followPwd;
-    private ScheduledFuture<?> pushGPS;
+    private ScheduledFuture<?> followMeTask;
     private ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private GoogleApiClient mGoogleApiClient;
     private LocationRequest mLocationRequest;
@@ -76,8 +79,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     SupportMapFragment mFragment;
     private Marker currLocationMarker;
     private Marker targetLocationMarker;
-    private KeyObject keyObject;
-    private java.net.CookieManager cookieManager;
+    private KeyObject pushKeyObject;
+    private KeyObject followKeyObject;
+    private CookieManager cookieManager;
 
     @Override
     protected void onStart() {
@@ -194,10 +198,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         try {
             super.onCreate(savedInstanceState);
             MyCustomApplication appObject = (MyCustomApplication) getApplication();
-            this.keyObject = appObject.getKeyObject();
             this.cookieManager = appObject.getCookieManager();
             this.
-            mGoogleApiClient = new GoogleApiClient.Builder(this)
+                    mGoogleApiClient = new GoogleApiClient.Builder(this)
                     .addApi(LocationServices.API)
                     .addConnectionCallbacks(this)
                     .addOnConnectionFailedListener(this)
@@ -238,22 +241,34 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 public synchronized void onClick(View view) {
                     if (followMe.isChecked()) {
                         followPwd.setFocusable(false);
-
+                        //clean key object
+                        String pushPwd = followPwd.getText().toString();
+                        try {
+                            pushKeyObject = new KeyObject(pushPwd);
+                        } catch (NoSuchAlgorithmException e) {
+                            e.printStackTrace();
+                            pushKeyObject = null;
+                        }
                         // fetch GPS every second
-                        pushGPS = scheduler.scheduleAtFixedRate(new Runnable() {
+                        followMeTask = scheduler.scheduleAtFixedRate(new Runnable() {
                             @Override
                             public void run() {
-                                // todo add scheduled pull task and draw map trace
                                 try {
+                                    // publish publish key encrypted by shared secret
+                                    byte[] httpResponseByteArr = Utils.sendByteArrAsFileViaHTTP(pushKeyObject.generateKeyExchangeMsg(), cookieManager, Utils.SERVER_DOMAIN + "/key", "keyUpload", mapsActivity);
+                                    //decrypt public keys of followers
+
+                                    pushKeyObject.parseKeyExchangeMsg(httpResponseByteArr);
                                     // generate GPS transfer object
                                     GpsTransfer gpsTransfer = new GpsTransfer(lastkLocation);
-                                    // encrypt GPS with shared secrect between clients
-                                    String pushPwd = followPwd.getText().toString();
-                                    byte[] encryptedGps = Utils.encryptJsonObject(gpsTransfer, pushPwd.getBytes());
-                                    // encrypt GPS again with session key between clients and web server
-                                    encryptedGps = Utils.encryptJsonObject(encryptedGps, keyObject.getSecretKey());
-
-                                    byte[] rsp = Utils.sendByteArrAsFileViaHTTP(encryptedGps,cookieManager , Utils.SERVER_DOMAIN + "/push", false, mapsActivity);
+                                    // encrypt GPS with DH-EKE session key between clients
+                                    Map<String, String> pushGPSObjectMap = new LinkedHashMap<>();
+                                    for (String followerId : pushKeyObject.getSecretKeyMap().keySet()) {
+                                        byte[] encryptedGpsByteArr = Utils.encryptJsonObject(gpsTransfer, pushKeyObject.getSecretKeyMap().get(followerId));
+                                        pushGPSObjectMap.put(followerId, Base64.encodeToString(encryptedGpsByteArr, Base64.DEFAULT));
+                                    }
+                                    byte[] tempJson = Utils.encodeObjectToJson(pushGPSObjectMap);
+                                    byte[] rsp = Utils.sendByteArrAsFileViaHTTP(tempJson, cookieManager, Utils.SERVER_DOMAIN + "/push", "dataUpload", mapsActivity);
                                 } catch (Exception e) {
                                     Log.e(APP_LABEL, "exception", e);
                                     e.printStackTrace();
@@ -263,8 +278,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     } else {
                         // todo remove scheduled push task
                         // stop scheduled push task
-                        if (pushGPS != null) {
-                            pushGPS.cancel(false);
+                        if (followMeTask != null) {
+                            followMeTask.cancel(false);
                         }
                         followPwd.setFocusableInTouchMode(true);
                         followPwd.setFocusable(true);
@@ -283,30 +298,42 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     if (follow.isChecked()) {
                         followSecrect.setFocusable(false);
                         followID.setFocusable(false);
+                        String secret = followSecrect.getText().toString();
+                        try {
+                            followKeyObject = new KeyObject(secret);
+                        } catch (NoSuchAlgorithmException e) {
+                            e.printStackTrace();
+                            followKeyObject = null;
+                        }
                         // fetch GPS every second
-                        fetchGPSwithID = scheduler.scheduleAtFixedRate(new Runnable() {
+                        followTask = scheduler.scheduleAtFixedRate(new Runnable() {
                             @Override
                             public void run() {
                                 try {
-                                    // todo add scheduled pull task and draw map trace
-                                    String fetchId = followID.getText().toString();
-                                    String secrect = followSecrect.getText().toString();
+                                    //pull task and draw map trace
+                                    String followIdStr = followID.getText().toString();
 
-                                    List<NameValuePair> nameValuePair = new ArrayList<>();
-                                    nameValuePair.add(new BasicNameValuePair("fetchId", fetchId));
+                                    // send encrypted follow key
+                                    Map<String, String> followKeyMap = new LinkedHashMap<>();
+                                    followKeyMap.put(followIdStr, Base64.encodeToString(followKeyObject.generateKeyExchangeMsg(), Base64.DEFAULT));
+                                    byte[] tempJson = Utils.encodeObjectToJson(followKeyMap);
+                                    byte[] httpResponseByteArr = Utils.sendByteArrAsFileViaHTTP(tempJson, cookieManager, Utils.SERVER_DOMAIN + "/follow", "followUpload", mapsActivity);
+                                    // fetch out published key
+                                    followKeyObject.parseKeyExchangeMsg(httpResponseByteArr);
+                                    //pull location information from server
 
-//                                    HttpResponse response = Utils.sendHTTPSWithNameValuePair(Utils.SERVER_DOMAIN + "/pull", nameValuePair, httpContext);
-//                                    HttpEntity entity = response.getEntity();
-//                                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-//                                    entity.writeTo(baos);
-//                                    byte[] GPSCipher = baos.toByteArray();
-
-                                    byte[] GPSCipher = Utils.sendHTTPSWithNameValuePair(Utils.SERVER_DOMAIN + "/pull", nameValuePair, cookieManager, mapsActivity);
-
-                                    // decrypt using session key between client and web server
-                                    GPSCipher = ArrayUtils.toPrimitive(Utils.decryptJsonObject(GPSCipher, keyObject.getSecretKey(), Byte[].class));
-                                    // decrypt using shared secrect between clients
-                                    GpsTransfer gpsTransfer = Utils.decryptJsonObject(GPSCipher, secrect.getBytes(), GpsTransfer.class);
+                                    byte[] GPSObjectMap = Utils.sendHTTPSWithNameValuePair(Utils.SERVER_DOMAIN + "/pull", new ArrayList<NameValuePair>(), cookieManager, mapsActivity);
+                                    Map<String, String> jsonGPSObjectMap = (Map<String, String>) Utils.decodeJsonToObject(GPSObjectMap, Map.class);
+                                    GpsTransfer gpsTransfer = null;
+                                    if(jsonGPSObjectMap != null && !jsonGPSObjectMap.isEmpty()) {
+                                        // using existing DH-EKE key to decrypt GPS objects (can be extended to follow multiple targets)
+                                        Map<String, GpsTransfer> gpsTransferMap = new LinkedHashMap<>();
+                                        for (String followId : followKeyObject.getSecretKeyMap().keySet()) {
+                                            gpsTransferMap.put(followId,
+                                                    Utils.decryptJsonObject(Base64.decode(jsonGPSObjectMap.get(followId), Base64.DEFAULT), followKeyObject.getSecretKeyMap().get(followId), GpsTransfer.class));
+                                        }
+                                        gpsTransfer = gpsTransferMap.get(followIdStr);
+                                    }
                                     if (gpsTransfer != null) {
                                         if (!isTargetOnline.get()) {
                                             mapsActivity.runOnUiThread(new Runnable() {
@@ -420,8 +447,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         followSecrect.setFocusable(true);
                         followID.setFocusableInTouchMode(true);
                         followID.setFocusable(true);
-                        if (fetchGPSwithID != null) {
-                            fetchGPSwithID.cancel(false);
+                        if (followTask != null) {
+                            followTask.cancel(false);
                         }
                         mapsActivity.runOnUiThread(new Runnable() {
                             @Override

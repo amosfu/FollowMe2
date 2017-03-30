@@ -2,6 +2,7 @@ package com.shuai.followme2.util;
 
 import android.app.Activity;
 import android.text.TextUtils;
+import android.util.Base64;
 import android.util.Log;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -25,10 +26,13 @@ import java.net.CookieManager;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.SynchronousQueue;
 
@@ -46,8 +50,8 @@ import info.guardianproject.netcipher.client.StrongConnectionBuilder;
 
 public class Utils {
     public static final String APP_LABEL = "FollowMe2";
-    public static final String SERVER_DOMAIN = "https://whiteboard-afu.rhcloud.com";
-    //public static final String SERVER_DOMAIN = "http://10.0.2.2:8080";
+    //public static final String SERVER_DOMAIN = "https://whiteboard-afu.rhcloud.com";
+    public static final String SERVER_DOMAIN = "http://10.0.2.2:8080";
 
     public static KeyPairGenerator KEY_PAIR_GENERATOR;
     public static KeyFactory KEY_FACTORY;
@@ -65,14 +69,13 @@ public class Utils {
             DHParameterSpec dhSpec = new DHParameterSpec(p, g, l);
             KEY_PAIR_GENERATOR.initialize(dhSpec);
             KEY_FACTORY = KeyFactory.getInstance("DH");
-
         } catch (Exception e) {
             Log.e(APP_LABEL, "exception", e);
             e.printStackTrace();
         }
     }
 
-    private synchronized static HttpsURLConnection getHttpsURLConnection(final URL url, Activity activity) throws Exception {
+    private synchronized static HttpURLConnection getHttpsURLConnection(final URL url, Activity activity) throws Exception {
         if (isTorEnabled) {
             final SynchronousQueue<Object> connectionQueue = new SynchronousQueue<>();
             final StrongConnectionBuilder builder = StrongConnectionBuilder.forMaxSecurity(activity).connectTo(url);
@@ -123,16 +126,17 @@ public class Utils {
                 }
             }).start();
 
-            return (HttpsURLConnection) connectionQueue.take();
+            return (HttpURLConnection) connectionQueue.take();
         } else {
-            return (HttpsURLConnection) url.openConnection();
+            return (HttpURLConnection) url.openConnection();
         }
     }
 
 
     public static byte[] encryptJsonObject(Object input, byte[] key) {
         byte[] encrypted = null;
-        String json = encodeObjectToJson(input);
+        byte[] json = encodeObjectToJson(input);
+        Log.e(APP_LABEL, "Encrypting Json : " + json);
         try {
             MessageDigest sha3 = MessageDigest.getInstance("SHA-256");
             // generate 256bit AES key
@@ -140,7 +144,7 @@ public class Utils {
             SecretKeySpec secretKeySpec = new SecretKeySpec(shortenSecretKey(digestedKey, 128), "AES");
             Cipher cipher = Cipher.getInstance("AES");
             cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec);
-            encrypted = cipher.doFinal(json.getBytes());
+            encrypted = cipher.doFinal(json);
         } catch (Exception e) {
             Log.e(APP_LABEL, "exception", e);
             e.printStackTrace();
@@ -158,7 +162,7 @@ public class Utils {
             Cipher cipher = Cipher.getInstance("AES");
             cipher.init(Cipher.DECRYPT_MODE, secretKeySpec);
 
-            String json = new String(cipher.doFinal(input));
+            byte[] json = cipher.doFinal(input);
             decryptedObject = decodeJsonToObject(json, outputClass);
         } catch (Exception e) {
             Log.e(APP_LABEL, "exception", e);
@@ -167,17 +171,15 @@ public class Utils {
         return decryptedObject;
     }
 
-    public static byte[] sendByteArrAsFileViaHTTP(byte[] payload, CookieManager cookieManager, String url, Boolean isKey, Activity activity) {
+    public static byte[] sendByteArrAsFileViaHTTP(byte[] payload, CookieManager cookieManager, String url, String attachmentName, Activity activity) {
         byte[] response = null;
         try {
-            String attachmentName = isKey ? "keyUpload" : "dataUpload";
-
             ContentBody contentPart = new ByteArrayBody(payload, attachmentName);
             MultipartEntity reqEntity = new MultipartEntity(HttpMultipartMode.BROWSER_COMPATIBLE);
             reqEntity.addPart(attachmentName, contentPart);
 
             URL httpsUrl = new URL(url);
-            HttpsURLConnection conn = getHttpsURLConnection(httpsUrl, activity);
+            HttpURLConnection conn = getHttpsURLConnection(httpsUrl, activity);
 //            conn.setReadTimeout(10000);
 //            conn.setConnectTimeout(15000);
             conn.setRequestMethod("POST");
@@ -210,11 +212,11 @@ public class Utils {
         return response;
     }
 
-    public static String encodeObjectToJson(Object input) {
-        String json = "";
+    public static byte[] encodeObjectToJson(Object input) {
+        byte[] json = new byte[]{};
         ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
         try {
-            json = ow.writeValueAsString(input);
+            json = ow.writeValueAsBytes(input);
         } catch (JsonProcessingException e) {
             Log.e(APP_LABEL, "exception", e);
             e.printStackTrace();
@@ -222,7 +224,7 @@ public class Utils {
         return json;
     }
 
-    public static <T> T decodeJsonToObject(String input, Class<T> outputClass) {
+    public static <T> T decodeJsonToObject(byte[] input, Class<T> outputClass) {
         T output = null;
         try {
             output = new ObjectMapper().readValue(input, outputClass);
@@ -264,9 +266,9 @@ public class Utils {
         // Url Encoding the POST parameters
         try {
             URL httpsUrl = new URL(url);
-            HttpsURLConnection conn = getHttpsURLConnection(httpsUrl, activity);
-//            conn.setReadTimeout(10000);
-//            conn.setConnectTimeout(15000);
+            HttpURLConnection conn = getHttpsURLConnection(httpsUrl, activity);
+ //           conn.setReadTimeout(10000);
+ //           conn.setConnectTimeout(15000);
             conn.setRequestMethod("POST");
             conn.setDoInput(true);
             conn.setDoOutput(true);
@@ -285,10 +287,7 @@ public class Utils {
             os.close();
             conn.connect();
 
-
-            if (200 <= conn.getResponseCode() && conn.getResponseCode() <= 299) {
-                response = IOUtils.toByteArray(conn.getInputStream());
-            } else {
+            if (conn.getResponseCode() == HttpsURLConnection.HTTP_OK) {
                 response = IOUtils.toByteArray(conn.getInputStream());
             }
         } catch (Exception e) {
@@ -314,5 +313,13 @@ public class Utils {
         }
 
         return result.toString();
+    }
+
+    //test
+    public static void main(String[] args) {
+        String name = "amos";
+        byte[] arr1 = Base64.decode(name, Base64.DEFAULT);
+       String name2 =  Base64.encodeToString(arr1,Base64.DEFAULT);
+        System.out.println(name2);
     }
 }

@@ -14,7 +14,6 @@ import info.guardianproject.netcipher.proxy.OrbotHelper;
  */
 
 public class MyCustomApplication extends Application {
-    private KeyObject keyObject;
     private CookieManager cookieManager;
     private OrbotHelper orbotHelper;
 
@@ -26,14 +25,6 @@ public class MyCustomApplication extends Application {
         this.orbotHelper = orbotHelper;
     }
 
-    public KeyObject getKeyObject() {
-        return keyObject;
-    }
-
-    public void setKeyObject(KeyObject keyObject) {
-        this.keyObject = keyObject;
-    }
-
     public CookieManager getCookieManager() {
         return cookieManager;
     }
@@ -42,6 +33,7 @@ public class MyCustomApplication extends Application {
     public void onCreate() {
         super.onCreate();
         orbotHelper = OrbotHelper.get(this);
+        orbotHelper.init();
         if (orbotHelper.isInstalled()) {
             Log.i(Utils.APP_LABEL,"Orbot is installed!");
             orbotHelper.init();

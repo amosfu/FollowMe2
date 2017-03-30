@@ -1,9 +1,9 @@
 package com.shuai.followme2.bean;
 
-import com.shuai.followme2.util.Utils;
+import android.util.Base64;
 
+import com.shuai.followme2.util.Utils;
 import java.io.Serializable;
-import org.apache.commons.codec.binary.Base64;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -45,8 +45,7 @@ public class KeyObject implements Serializable {
             if (encryptedKeyMap != null && !encryptedKeyMap.isEmpty()) {
                 Map<String, KeyTransfer> keyTransferMap = new LinkedHashMap<>();
                 for (String id : encryptedKeyMap.keySet()) {
-                    String keyStr = encryptedKeyMap.get(id);
-                    keyTransferMap.put(id, Utils.decryptJsonObject(Base64.decodeBase64(keyStr), sharedSecret.getBytes(), KeyTransfer.class));
+                    keyTransferMap.put(id, Utils.decryptJsonObject(Base64.decode(encryptedKeyMap.get(id),Base64.DEFAULT), sharedSecret.getBytes(), KeyTransfer.class));
                 }
                 if (keyTransferMap != null && !keyTransferMap.isEmpty()) {
                     // decode received public keys

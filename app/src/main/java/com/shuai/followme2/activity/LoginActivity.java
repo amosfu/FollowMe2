@@ -73,13 +73,6 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
     private View mProgressView;
     private View mLoginFormView;
 
-    //DH-EKE key object
-    private KeyObject keyObject = null;
-
-    public KeyObject getKeyObject() {
-        return keyObject;
-    }
-
     CookieManager cookieManager = null;
 
     public CookieManager getCookieManager() {
@@ -359,14 +352,14 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
                 publishProgress(50);
                 // DH-EKE key exchange
                 // Creating HTTP client
-                try {
-                    keyObject = new KeyObject(mPassword);
-                    byte[] httpResponseByteArr = Utils.sendByteArrAsFileViaHTTP(keyObject.generateKeyExchangeMsg(), cookieManager, Utils.SERVER_DOMAIN + "/key", true, loginActivity);
-                    keyObject.parseKeyExchangeMsg(httpResponseByteArr);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    return false;
-                }
+//                try {
+//                    keyObject = new KeyObject(mPassword);
+//                    byte[] httpResponseByteArr = Utils.sendByteArrAsFileViaHTTP(keyObject.generateKeyExchangeMsg(), cookieManager, Utils.SERVER_DOMAIN + "/key", "keyUpload", loginActivity);
+//                    keyObject.parseKeyExchangeMsg(httpResponseByteArr);
+//                } catch (Exception e) {
+//                    e.printStackTrace();
+//                    return false;
+//                }
                 // finish
                 publishProgress(100);
                 return true;
@@ -394,7 +387,6 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
             if (success) {
                 Intent intent = new Intent(loginActivity, MapsActivity.class);
                 MyCustomApplication appObject = (MyCustomApplication) getApplication();
-                appObject.setKeyObject(keyObject);
                 appObject.setCookieManager(cookieManager);
                 loginActivity.startActivity(intent);
             } else {
