@@ -50,8 +50,8 @@ import info.guardianproject.netcipher.client.StrongConnectionBuilder;
 
 public class Utils {
     public static final String APP_LABEL = "FollowMe2";
-    //public static final String SERVER_DOMAIN = "https://whiteboard-afu.rhcloud.com";
-    public static final String SERVER_DOMAIN = "http://10.0.2.2:8080";
+    public static final String SERVER_DOMAIN = "https://whiteboard-afu.rhcloud.com";
+    //public static final String SERVER_DOMAIN = "http://10.0.2.2:8080";
 
     public static KeyPairGenerator KEY_PAIR_GENERATOR;
     public static KeyFactory KEY_FACTORY;
@@ -75,7 +75,7 @@ public class Utils {
         }
     }
 
-    private synchronized static HttpURLConnection getHttpsURLConnection(final URL url, Activity activity) throws Exception {
+    private synchronized static HttpsURLConnection getHttpsURLConnection(final URL url, Activity activity) throws Exception {
         if (isTorEnabled) {
             final SynchronousQueue<Object> connectionQueue = new SynchronousQueue<>();
             final StrongConnectionBuilder builder = StrongConnectionBuilder.forMaxSecurity(activity).connectTo(url);
@@ -126,9 +126,9 @@ public class Utils {
                 }
             }).start();
 
-            return (HttpURLConnection) connectionQueue.take();
+            return (HttpsURLConnection) connectionQueue.take();
         } else {
-            return (HttpURLConnection) url.openConnection();
+            return (HttpsURLConnection) url.openConnection();
         }
     }
 
@@ -179,7 +179,7 @@ public class Utils {
             reqEntity.addPart(attachmentName, contentPart);
 
             URL httpsUrl = new URL(url);
-            HttpURLConnection conn = getHttpsURLConnection(httpsUrl, activity);
+            HttpsURLConnection conn = getHttpsURLConnection(httpsUrl, activity);
 //            conn.setReadTimeout(10000);
 //            conn.setConnectTimeout(15000);
             conn.setRequestMethod("POST");
@@ -266,7 +266,7 @@ public class Utils {
         // Url Encoding the POST parameters
         try {
             URL httpsUrl = new URL(url);
-            HttpURLConnection conn = getHttpsURLConnection(httpsUrl, activity);
+            HttpsURLConnection conn = getHttpsURLConnection(httpsUrl, activity);
  //           conn.setReadTimeout(10000);
  //           conn.setConnectTimeout(15000);
             conn.setRequestMethod("POST");
