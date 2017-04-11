@@ -40,6 +40,7 @@ import com.shuai.followme2.bean.KeyObject;
 import com.shuai.followme2.bean.MyCustomApplication;
 import com.shuai.followme2.util.Utils;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.NameValuePair;
 
 import java.net.CookieManager;
@@ -278,7 +279,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                             }
                         }, 0, 5, TimeUnit.SECONDS);
                     } else {
-                        // todo remove scheduled push task
                         // stop scheduled push task
                         if (followMeTask != null) {
                             followMeTask.cancel(false);
@@ -331,8 +331,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                         // using existing DH-EKE key to decrypt GPS objects (can be extended to follow multiple targets)
                                         Map<String, GpsTransfer> gpsTransferMap = new LinkedHashMap<>();
                                         for (String followId : followKeyObject.getSecretKeyMap().keySet()) {
-                                            gpsTransferMap.put(followId,
-                                                    Utils.decryptJsonObject(Base64.decode(jsonGPSObjectMap.get(followId), Base64.DEFAULT), followKeyObject.getSecretKeyMap().get(followId), GpsTransfer.class));
+                                            if (StringUtils.isNotEmpty(jsonGPSObjectMap.get(followId))) {
+                                                gpsTransferMap.put(followId,
+                                                        Utils.decryptJsonObject(Base64.decode(jsonGPSObjectMap.get(followId), Base64.DEFAULT), followKeyObject.getSecretKeyMap().get(followId), GpsTransfer.class));
+                                            }
                                         }
                                         gpsTransfer = gpsTransferMap.get(followIdStr);
                                     }
