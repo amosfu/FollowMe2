@@ -44,7 +44,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.http.NameValuePair;
 
 import java.net.CookieManager;
-import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
